@@ -1,5 +1,5 @@
 //
-// Copyright 2024 Christopher Atherton <the8lack8ox@pm.me>
+// Copyright 2024-2025 Christopher Atherton <cjatherton@proton.me>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the “Software”), to
@@ -30,8 +30,7 @@ use std::{env, fmt};
 struct Sha256 {
     hash: [u32; 8],
     length: usize,
-    remainder: [u8; 64],
-    remainder_len: usize,
+    buffer: Vec<u8>,
     finished: bool,
 }
 
@@ -43,8 +42,7 @@ impl Sha256 {
                 0x5BE0CD19,
             ],
             length: 0,
-            remainder: [0; 64],
-            remainder_len: 0,
+            buffer: Vec::new(),
             finished: false,
         }
     }
@@ -64,30 +62,12 @@ impl Sha256 {
         ];
 
         self.length += buf.len();
+        self.buffer.extend_from_slice(buf);
 
-        let mut slices = Vec::with_capacity((self.remainder.len() + buf.len()) / 64);
-        if self.remainder_len == 0 {
-            for i in 0..(buf.len() / 64) {
-                slices.push(&buf[(i * 64)..((i + 1) * 64)]);
-            }
-        } else if self.remainder_len + buf.len() >= 64 {
-            self.remainder[self.remainder_len..].copy_from_slice(&buf[..(64 - self.remainder_len)]);
-            slices.push(&self.remainder);
-            for i in 1..(buf.len() / 64) {
-                slices.push(
-                    buf[(i * 64 - self.remainder_len)..((i + 1) * 64 - self.remainder_len)]
-                        .try_into()
-                        .unwrap(),
-                );
-            }
-        } else {
-            self.remainder[self.remainder_len..(self.remainder_len + buf.len())]
-                .copy_from_slice(buf);
-            self.remainder_len += buf.len();
-            return;
-        }
+        let chunks = self.buffer.chunks_exact(64);
+        let remainder_tmp = chunks.remainder();
 
-        for chunk in slices {
+        for chunk in chunks {
             let mut w = Vec::with_capacity(64);
             for i in 0..16 {
                 w.push(
@@ -149,9 +129,7 @@ impl Sha256 {
             self.hash[7] = self.hash[7].wrapping_add(h);
         }
 
-        self.remainder_len = buf.len() % 64;
-        self.remainder[..self.remainder_len]
-            .copy_from_slice(&buf[(buf.len() - self.remainder_len)..]);
+        self.buffer = Vec::from(remainder_tmp);
     }
 
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
@@ -161,28 +139,10 @@ impl Sha256 {
         use std::arch::x86_64::*;
 
         self.length += buf.len();
+        self.buffer.extend_from_slice(buf);
 
-        let mut slices = Vec::with_capacity((self.remainder.len() + buf.len()) / 64);
-        if self.remainder_len == 0 {
-            for i in 0..(buf.len() / 64) {
-                slices.push(&buf[(i * 64)..((i + 1) * 64)]);
-            }
-        } else if self.remainder_len + buf.len() >= 64 {
-            self.remainder[self.remainder_len..].copy_from_slice(&buf[..(64 - self.remainder_len)]);
-            slices.push(&self.remainder);
-            for i in 1..(buf.len() / 64) {
-                slices.push(
-                    buf[(i * 64 - self.remainder_len)..((i + 1) * 64 - self.remainder_len)]
-                        .try_into()
-                        .unwrap(),
-                );
-            }
-        } else {
-            self.remainder[self.remainder_len..(self.remainder_len + buf.len())]
-                .copy_from_slice(buf);
-            self.remainder_len += buf.len();
-            return;
-        }
+        let chunks = self.buffer.chunks_exact(64);
+        let remainder_tmp = chunks.remainder();
 
         let mask = unsafe { _mm_set_epi64x(0x0C0D0E0F08090A0B, 0x0405060700010203) };
         let mut tmp = unsafe { _mm_loadu_si128(self.hash[0..4].as_ptr() as *const _) };
@@ -193,7 +153,7 @@ impl Sha256 {
         let mut state0 = unsafe { _mm_alignr_epi8(tmp, state1, 8) };
         state1 = unsafe { _mm_blend_epi16(state1, tmp, 0xF0) };
 
-        for chunk in slices {
+        for chunk in chunks {
             // Save current state
             let abef_save = state0;
             let cdgh_save = state1;
@@ -406,9 +366,7 @@ impl Sha256 {
             _mm_storeu_si128(self.hash[4..8].as_ptr() as *mut _, state1);
         }
 
-        self.remainder_len = buf.len() % 64;
-        self.remainder[..self.remainder_len]
-            .copy_from_slice(&buf[(buf.len() - self.remainder_len)..]);
+        self.buffer = Vec::from(remainder_tmp);
     }
 
     pub fn update(&mut self, buf: &[u8]) {
@@ -433,7 +391,7 @@ impl Sha256 {
         const ZEROS: [u8; 64] = [0; 64];
         let mut end = Vec::with_capacity(64);
         end.push(0x80);
-        end.extend_from_slice(&ZEROS[..(120 - ((self.length + 1) % 64) % 64)]);
+        end.extend_from_slice(&ZEROS[..(120 - ((self.length + 1) % 64)) % 64]);
         end.extend_from_slice(&(self.length as u64 * 8).to_be_bytes());
 
         self.update(&end);
