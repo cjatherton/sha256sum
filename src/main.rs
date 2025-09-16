@@ -478,7 +478,7 @@ impl Input {
                     }
                 }
             }
-            Self::Digest(p) => todo!("Digest files are not yet implemented"),
+            Self::Digest(_p) => todo!("Digest files are not yet implemented"),
         }
     }
 }
