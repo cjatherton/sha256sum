@@ -144,12 +144,12 @@ impl Sha256 {
         let chunks = self.buffer.chunks_exact(64);
         let remainder_tmp = chunks.remainder();
 
-        let mask = unsafe { _mm_set_epi64x(0x0C0D0E0F08090A0B, 0x0405060700010203) };
+        let mask = _mm_set_epi64x(0x0C0D0E0F08090A0B, 0x0405060700010203);
         let mut tmp = unsafe { _mm_loadu_si128(self.hash[0..4].as_ptr() as *const _) };
         let mut state1 = unsafe { _mm_loadu_si128(self.hash[4..8].as_ptr() as *const _) };
 
-        tmp = unsafe { _mm_shuffle_epi32(tmp, 0xB1) };
-        state1 = unsafe { _mm_shuffle_epi32(state1, 0x1B) };
+        tmp = _mm_shuffle_epi32(tmp, 0xB1);
+        state1 = _mm_shuffle_epi32(state1, 0x1B);
         let mut state0 = unsafe { _mm_alignr_epi8(tmp, state1, 8) };
         state1 = unsafe { _mm_blend_epi16(state1, tmp, 0xF0) };
 
@@ -342,18 +342,14 @@ impl Sha256 {
             }
 
             // Rounds 60 ~ 63
-            unsafe {
-                msg = _mm_add_epi32(msg3, _mm_set_epi64x(0xC67178F2BEF9A3F7, 0xA4506CEB90BEFFFA));
-                state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
-                msg = _mm_shuffle_epi32(msg, 0x0E);
-                state0 = _mm_sha256rnds2_epu32(state0, state1, msg);
-            }
+            msg = _mm_add_epi32(msg3, _mm_set_epi64x(0xC67178F2BEF9A3F7, 0xA4506CEB90BEFFFA));
+            state1 = _mm_sha256rnds2_epu32(state1, state0, msg);
+            msg = _mm_shuffle_epi32(msg, 0x0E);
+            state0 = _mm_sha256rnds2_epu32(state0, state1, msg);
 
             // Combine state
-            unsafe {
-                state0 = _mm_add_epi32(state0, abef_save);
-                state1 = _mm_add_epi32(state1, cdgh_save);
-            }
+            state0 = _mm_add_epi32(state0, abef_save);
+            state1 = _mm_add_epi32(state1, cdgh_save);
         }
 
         unsafe {
