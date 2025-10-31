@@ -132,10 +132,13 @@ impl Sha256 {
         self.buffer = Vec::from(remainder_tmp);
     }
 
-    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[target_feature(enable = "sha")]
     #[allow(overflowing_literals)]
     unsafe fn intrinsic_update(&mut self, buf: &[u8]) {
+        #[cfg(target_arch = "x86")]
+        use std::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
         use std::arch::x86_64::*;
 
         // Set up
@@ -336,14 +339,12 @@ impl Sha256 {
     pub fn update(&mut self, buf: &[u8]) {
         assert!(!self.finished);
 
-        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        {
-            if is_x86_feature_detected!("sha") {
-                unsafe {
-                    self.intrinsic_update(buf);
-                }
-                return;
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        if is_x86_feature_detected!("sha") {
+            unsafe {
+                self.intrinsic_update(buf);
             }
+            return;
         }
 
         self.slow_update(buf);
