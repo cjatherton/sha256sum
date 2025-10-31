@@ -65,7 +65,7 @@ impl Sha256 {
         self.buffer.extend_from_slice(buf);
 
         let chunks = self.buffer.chunks_exact(64);
-        let remainder_tmp = chunks.remainder();
+        let remainder = chunks.remainder();
 
         for chunk in chunks {
             let mut w = Vec::with_capacity(64);
@@ -129,7 +129,7 @@ impl Sha256 {
             self.hash[7] = self.hash[7].wrapping_add(h);
         }
 
-        self.buffer = Vec::from(remainder_tmp);
+        self.buffer = remainder.to_vec();
     }
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -145,7 +145,7 @@ impl Sha256 {
         self.length += buf.len();
         self.buffer.extend_from_slice(buf);
         let chunks = self.buffer.chunks_exact(64);
-        let remainder_tmp = chunks.remainder();
+        let remainder = chunks.remainder();
 
         // Mask
         let mask = _mm_set_epi64x(0x0C0D0E0F08090A0B, 0x0405060700010203);
@@ -333,7 +333,7 @@ impl Sha256 {
         }
 
         // Save unused bytes for later
-        self.buffer = Vec::from(remainder_tmp);
+        self.buffer = remainder.to_vec();
     }
 
     pub fn update(&mut self, buf: &[u8]) {
