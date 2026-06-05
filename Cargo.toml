@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 description = "Compute SHA256 hash"
-authors = ["Christopher Atherton <cjatherton@proton.me>"]
+authors = ["Christopher Atherton <cjatherton@pm.me>"]
 
 [dependencies]
