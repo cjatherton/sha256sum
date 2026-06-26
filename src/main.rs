@@ -1,5 +1,5 @@
 //
-// Copyright 2024-2025 Christopher Atherton <cjatherton@pm.me>
+// Copyright 2024-2026 Christopher Atherton <cjatherton@pm.me>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the “Software”), to
@@ -22,7 +22,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{ErrorKind, Read, Result};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Result};
 use std::ops::Shr;
 use std::process::ExitCode;
 use std::{env, fmt};
@@ -365,10 +365,10 @@ impl Sha256 {
         self.finished = true;
     }
 
-    // pub fn hash(&self) -> [u32; 8] {
-    //     assert!(self.finished);
-    //     self.hash
-    // }
+    pub fn hash(&self) -> [u32; 8] {
+        assert!(self.finished);
+        self.hash
+    }
 }
 
 impl fmt::Display for Sha256 {
@@ -401,9 +401,134 @@ fn sha256_stream<R: Read>(stream: &mut R) -> Result<Sha256> {
     Ok(sha)
 }
 
+fn check_digest_file(path: &String) -> ExitCode {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(err) => {
+            match err.kind() {
+                ErrorKind::IsADirectory => eprintln!("{path}: Is a directory"),
+                ErrorKind::NotFound => eprintln!("{path}: No such file or directory"),
+                _ => eprintln!("{path}: Unknown error"),
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+    let reader = BufReader::new(file);
+
+    let mut exit_code = ExitCode::SUCCESS;
+
+    for (index, line) in reader
+        .lines()
+        .map(|l| l.expect("Line cannot be read"))
+        .enumerate()
+    {
+        // Remove leading whitespace
+        let line = line.as_str().trim_start();
+
+        // Ignore empty lines and comments
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        // Check line length
+        if line.len() < 67 {
+            eprintln!("{path}: Line {} is not properly formatted", index + 1);
+            exit_code = ExitCode::FAILURE;
+            continue;
+        }
+
+        // Ensure digest is followed by a space
+        if line.chars().nth(64).unwrap() != ' ' {
+            eprintln!("{path}: Line {} is is not properly formatted", index + 1);
+            exit_code = ExitCode::FAILURE;
+            continue;
+        }
+
+        // Check text/binary flag
+        let text_flag = line.chars().nth(65).unwrap();
+        if text_flag != ' ' && text_flag != '*' {
+            eprintln!("{path}: Line {} is not properly formatted", index + 1);
+            exit_code = ExitCode::FAILURE;
+            continue;
+        }
+
+        // Parse digest string
+        let mut hex_arr = [0u32; 8];
+        for (i, chunk) in line
+            .chars()
+            .take(64)
+            .collect::<String>()
+            .as_bytes()
+            .chunks_exact(8)
+            .enumerate()
+        {
+            let n = match std::str::from_utf8(chunk) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln!("{path}: Line {} is not properly formatted", index + 1);
+                    exit_code = ExitCode::FAILURE;
+                    continue;
+                }
+            };
+            hex_arr[i] = match u32::from_str_radix(n, 16) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln!("{path}: Line {} is not properly formatted", index + 1);
+                    exit_code = ExitCode::FAILURE;
+                    continue;
+                }
+            };
+        }
+
+        // Check file
+        let file_path = line.chars().skip(66).collect::<String>();
+        if file_path != "-" {
+            match File::open(&file_path) {
+                Ok(mut f) => match sha256_stream(&mut f) {
+                    Ok(sha) => {
+                        if hex_arr == sha.hash() {
+                            println!("{file_path}: OK");
+                        } else {
+                            println!("{file_path}: FAILED");
+                            exit_code = ExitCode::FAILURE;
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("{file_path}: {err}");
+                        exit_code = ExitCode::FAILURE;
+                        continue;
+                    }
+                },
+                Err(err) => {
+                    eprintln!("{file_path}: {err}");
+                    exit_code = ExitCode::FAILURE;
+                    continue;
+                }
+            };
+        } else {
+            match sha256_stream(&mut std::io::stdin()) {
+                Ok(sha) => {
+                    if hex_arr == sha.hash() {
+                        println!("-: OK");
+                    } else {
+                        println!("-: FAILED");
+                        exit_code = ExitCode::FAILURE;
+                    }
+                }
+                Err(err) => {
+                    eprintln!("-: {err}");
+                    exit_code = ExitCode::FAILURE;
+                }
+            }
+        }
+    }
+
+    exit_code
+}
+
 enum Input {
     File(String),
-    Digest(String),
+    DigestFile(String),
 }
 
 impl Input {
@@ -449,7 +574,7 @@ impl Input {
                     }
                 }
             }
-            Self::Digest(_p) => todo!("Digest files are not yet implemented"),
+            Self::DigestFile(p) => check_digest_file(p),
         }
     }
 }
@@ -467,7 +592,7 @@ fn main() -> ExitCode {
                     .iter()
                     .position(|arg| !arg.starts_with("-") || arg == "-")
                 {
-                    inputs.push(Input::Digest(args.remove(pos).unwrap()));
+                    inputs.push(Input::DigestFile(args.remove(pos).unwrap()));
                 }
             } else {
                 eprintln!("invalid option -- '{arg}'");
@@ -481,7 +606,7 @@ fn main() -> ExitCode {
                             .iter()
                             .position(|arg| !arg.starts_with("-") || arg == "-")
                         {
-                            inputs.push(Input::Digest(args.remove(pos).unwrap()));
+                            inputs.push(Input::DigestFile(args.remove(pos).unwrap()));
                         }
                     }
                     _ => {
