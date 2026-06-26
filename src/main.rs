@@ -22,7 +22,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, BufReader, ErrorKind, Read, Result};
+use std::io::{BufRead, BufReader, Read, Result};
 use std::ops::Shr;
 use std::process::ExitCode;
 use std::{env, fmt};
@@ -405,11 +405,7 @@ fn check_digest_file(path: &String) -> bool {
     let file = match File::open(path) {
         Ok(f) => f,
         Err(err) => {
-            match err.kind() {
-                ErrorKind::IsADirectory => eprintln!("{path}: Is a directory"),
-                ErrorKind::NotFound => eprintln!("{path}: No such file or directory"),
-                _ => eprintln!("{path}: Unknown error"),
-            }
+            eprintln!("{path}: {err}");
             return false;
         }
     };
