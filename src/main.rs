@@ -527,6 +527,7 @@ fn check_digest_file(path: &String) -> bool {
 }
 
 enum Input {
+    Stdin,
     File(String),
     DigestFile(String),
 }
@@ -534,37 +535,32 @@ enum Input {
 impl Input {
     fn process(&self) -> bool {
         match self {
-            Self::File(p) => {
-                if p != "-" {
-                    match File::open(p) {
-                        Ok(mut f) => match sha256_stream(&mut f) {
-                            Ok(sha) => {
-                                println!("{sha}  {p}");
-                                true
-                            }
-                            Err(err) => {
-                                eprintln!("{p}: {err}");
-                                false
-                            }
-                        },
-                        Err(err) => {
-                            eprintln!("{p}: {err}");
-                            false
-                        }
-                    }
-                } else {
-                    match sha256_stream(&mut std::io::stdin()) {
-                        Ok(sha) => {
-                            println!("{sha}  -");
-                            true
-                        }
-                        Err(err) => {
-                            eprintln!("{p}: {err}");
-                            false
-                        }
-                    }
+            Self::Stdin => match sha256_stream(&mut std::io::stdin()) {
+                Ok(sha) => {
+                    println!("{sha}  -");
+                    true
                 }
-            }
+                Err(err) => {
+                    eprintln!("-: {err}");
+                    false
+                }
+            },
+            Self::File(p) => match File::open(p) {
+                Ok(mut f) => match sha256_stream(&mut f) {
+                    Ok(sha) => {
+                        println!("{sha}  {p}");
+                        true
+                    }
+                    Err(err) => {
+                        eprintln!("{p}: {err}");
+                        false
+                    }
+                },
+                Err(err) => {
+                    eprintln!("{p}: {err}");
+                    false
+                }
+            },
             Self::DigestFile(p) => check_digest_file(p),
         }
     }
@@ -606,6 +602,8 @@ fn main() -> ExitCode {
                     }
                 }
             }
+        } else if arg == "-" {
+            inputs.push(Input::Stdin);
         } else {
             inputs.push(Input::File(arg));
         }
