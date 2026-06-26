@@ -401,7 +401,7 @@ fn sha256_stream<R: Read>(stream: &mut R) -> Result<Sha256> {
     Ok(sha)
 }
 
-fn check_digest_file(path: &String) -> ExitCode {
+fn check_digest_file(path: &String) -> bool {
     let file = match File::open(path) {
         Ok(f) => f,
         Err(err) => {
@@ -410,12 +410,12 @@ fn check_digest_file(path: &String) -> ExitCode {
                 ErrorKind::NotFound => eprintln!("{path}: No such file or directory"),
                 _ => eprintln!("{path}: Unknown error"),
             }
-            return ExitCode::FAILURE;
+            return false;
         }
     };
     let reader = BufReader::new(file);
 
-    let mut exit_code = ExitCode::SUCCESS;
+    let mut success = true;
 
     for (index, line) in reader
         .lines()
@@ -433,14 +433,14 @@ fn check_digest_file(path: &String) -> ExitCode {
         // Check line length
         if line.len() < 67 {
             eprintln!("{path}: Line {} is not properly formatted", index + 1);
-            exit_code = ExitCode::FAILURE;
+            success = false;
             continue;
         }
 
         // Ensure digest is followed by a space
         if line.chars().nth(64).unwrap() != ' ' {
             eprintln!("{path}: Line {} is is not properly formatted", index + 1);
-            exit_code = ExitCode::FAILURE;
+            success = false;
             continue;
         }
 
@@ -448,7 +448,7 @@ fn check_digest_file(path: &String) -> ExitCode {
         let text_flag = line.chars().nth(65).unwrap();
         if text_flag != ' ' && text_flag != '*' {
             eprintln!("{path}: Line {} is not properly formatted", index + 1);
-            exit_code = ExitCode::FAILURE;
+            success = false;
             continue;
         }
 
@@ -466,7 +466,7 @@ fn check_digest_file(path: &String) -> ExitCode {
                 Ok(s) => s,
                 Err(_) => {
                     eprintln!("{path}: Line {} is not properly formatted", index + 1);
-                    exit_code = ExitCode::FAILURE;
+                    success = false;
                     continue;
                 }
             };
@@ -474,7 +474,7 @@ fn check_digest_file(path: &String) -> ExitCode {
                 Ok(s) => s,
                 Err(_) => {
                     eprintln!("{path}: Line {} is not properly formatted", index + 1);
-                    exit_code = ExitCode::FAILURE;
+                    success = false;
                     continue;
                 }
             };
@@ -490,18 +490,18 @@ fn check_digest_file(path: &String) -> ExitCode {
                             println!("{file_path}: OK");
                         } else {
                             println!("{file_path}: FAILED");
-                            exit_code = ExitCode::FAILURE;
+                            success = false;
                         }
                     }
                     Err(err) => {
                         eprintln!("{file_path}: {err}");
-                        exit_code = ExitCode::FAILURE;
+                        success = false;
                         continue;
                     }
                 },
                 Err(err) => {
                     eprintln!("{file_path}: {err}");
-                    exit_code = ExitCode::FAILURE;
+                    success = false;
                     continue;
                 }
             };
@@ -512,18 +512,18 @@ fn check_digest_file(path: &String) -> ExitCode {
                         println!("-: OK");
                     } else {
                         println!("-: FAILED");
-                        exit_code = ExitCode::FAILURE;
+                        success = false;
                     }
                 }
                 Err(err) => {
                     eprintln!("-: {err}");
-                    exit_code = ExitCode::FAILURE;
+                    success = false;
                 }
             }
         }
     }
 
-    exit_code
+    success
 }
 
 enum Input {
@@ -532,7 +532,7 @@ enum Input {
 }
 
 impl Input {
-    fn process(&self) -> ExitCode {
+    fn process(&self) -> bool {
         match self {
             Self::File(p) => {
                 if p != "-" {
@@ -540,27 +540,27 @@ impl Input {
                         Ok(mut f) => match sha256_stream(&mut f) {
                             Ok(sha) => {
                                 println!("{sha}  {p}");
-                                ExitCode::SUCCESS
+                                true
                             }
                             Err(err) => {
                                 eprintln!("{p}: {err}");
-                                ExitCode::FAILURE
+                                false
                             }
                         },
                         Err(err) => {
                             eprintln!("{p}: {err}");
-                            ExitCode::FAILURE
+                            false
                         }
                     }
                 } else {
                     match sha256_stream(&mut std::io::stdin()) {
                         Ok(sha) => {
                             println!("{sha}  -");
-                            ExitCode::SUCCESS
+                            true
                         }
                         Err(err) => {
                             eprintln!("{p}: {err}");
-                            ExitCode::FAILURE
+                            false
                         }
                     }
                 }
@@ -612,15 +612,19 @@ fn main() -> ExitCode {
     }
 
     // Run
-    let mut exit_code = ExitCode::SUCCESS;
+    let mut success;
     if inputs.is_empty() {
-        exit_code = Input::File("-".to_string()).process();
+        success = Input::File("-".to_string()).process();
     } else {
+        success = true;
         for input in inputs {
-            if input.process() == ExitCode::FAILURE {
-                exit_code = ExitCode::FAILURE;
-            }
+            success = input.process() && success;
         }
     }
-    exit_code
+
+    if success {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
