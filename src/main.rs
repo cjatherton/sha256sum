@@ -543,18 +543,12 @@ impl Input {
                                 ExitCode::SUCCESS
                             }
                             Err(err) => {
-                                match err.kind() {
-                                    ErrorKind::IsADirectory => eprintln!("{p}: Is a directory"),
-                                    _ => eprintln!("{p}: Unknown error"),
-                                }
+                                eprintln!("{p}: {err}");
                                 ExitCode::FAILURE
                             }
                         },
                         Err(err) => {
-                            match err.kind() {
-                                ErrorKind::NotFound => eprintln!("{p}: No such file or directory"),
-                                _ => eprintln!("{p}: Unknown error"),
-                            }
+                            eprintln!("{p}: {err}");
                             ExitCode::FAILURE
                         }
                     }
@@ -565,10 +559,7 @@ impl Input {
                             ExitCode::SUCCESS
                         }
                         Err(err) => {
-                            match err.kind() {
-                                ErrorKind::IsADirectory => eprintln!("-: Is a directory"),
-                                _ => eprintln!("-: Unknown error"),
-                            }
+                            eprintln!("{p}: {err}");
                             ExitCode::FAILURE
                         }
                     }
