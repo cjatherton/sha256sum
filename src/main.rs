@@ -401,15 +401,8 @@ fn sha256_stream<R: Read>(stream: &mut R) -> Result<Sha256> {
     Ok(sha)
 }
 
-fn check_digest_file(path: &String) -> bool {
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(err) => {
-            eprintln!("{path}: {err}");
-            return false;
-        }
-    };
-    let reader = BufReader::new(file);
+fn check_digest_file<R: Read>(stream: &mut R, path: &str) -> bool {
+    let reader = BufReader::new(stream);
 
     let mut success = true;
 
@@ -525,6 +518,7 @@ fn check_digest_file(path: &String) -> bool {
 enum Input {
     Stdin,
     File(String),
+    StdinDigestFile,
     DigestFile(String),
 }
 
@@ -557,7 +551,14 @@ impl Input {
                     false
                 }
             },
-            Self::DigestFile(p) => check_digest_file(p),
+            Self::StdinDigestFile => check_digest_file(&mut std::io::stdin(), "-"),
+            Self::DigestFile(p) => match File::open(&p) {
+                Ok(mut f) => check_digest_file(&mut f, p),
+                Err(err) => {
+                    eprintln!("{p}: {err}");
+                    false
+                }
+            },
         }
     }
 }
@@ -575,7 +576,14 @@ fn main() -> ExitCode {
                     .iter()
                     .position(|arg| !arg.starts_with("-") || arg == "-")
                 {
-                    inputs.push(Input::DigestFile(args.remove(pos).unwrap()));
+                    let path = args.remove(pos).unwrap();
+                    if path != "-" {
+                        inputs.push(Input::DigestFile(path));
+                    } else {
+                        inputs.push(Input::StdinDigestFile);
+                    }
+                } else {
+                    inputs.push(Input::StdinDigestFile);
                 }
             } else {
                 eprintln!("invalid option -- '{arg}'");
@@ -589,7 +597,14 @@ fn main() -> ExitCode {
                             .iter()
                             .position(|arg| !arg.starts_with("-") || arg == "-")
                         {
-                            inputs.push(Input::DigestFile(args.remove(pos).unwrap()));
+                            let path = args.remove(pos).unwrap();
+                            if path != "-" {
+                                inputs.push(Input::DigestFile(path));
+                            } else {
+                                inputs.push(Input::StdinDigestFile);
+                            }
+                        } else {
+                            inputs.push(Input::StdinDigestFile);
                         }
                     }
                     _ => {
