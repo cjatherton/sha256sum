@@ -552,7 +552,7 @@ impl Input {
                 }
             },
             Self::StdinDigestFile => check_digest_file(&mut std::io::stdin(), "-"),
-            Self::DigestFile(p) => match File::open(&p) {
+            Self::DigestFile(p) => match File::open(p) {
                 Ok(mut f) => check_digest_file(&mut f, p),
                 Err(err) => {
                     eprintln!("{p}: {err}");
