@@ -406,7 +406,7 @@ fn check_digest_file<R: Read>(stream: &mut R, path: &str) -> bool {
 
     let mut success = true;
 
-    for (index, line) in reader
+    'outer: for (index, line) in reader
         .lines()
         .map(|l| l.expect("Line cannot be read"))
         .enumerate()
@@ -456,7 +456,7 @@ fn check_digest_file<R: Read>(stream: &mut R, path: &str) -> bool {
                 Err(_) => {
                     eprintln!("{path}: Line {} is not properly formatted", index + 1);
                     success = false;
-                    continue;
+                    continue 'outer;
                 }
             };
             hex_arr[i] = match u32::from_str_radix(n, 16) {
@@ -464,7 +464,7 @@ fn check_digest_file<R: Read>(stream: &mut R, path: &str) -> bool {
                 Err(_) => {
                     eprintln!("{path}: Line {} is not properly formatted", index + 1);
                     success = false;
-                    continue;
+                    continue 'outer;
                 }
             };
         }
@@ -485,13 +485,11 @@ fn check_digest_file<R: Read>(stream: &mut R, path: &str) -> bool {
                     Err(err) => {
                         eprintln!("{file_path}: {err}");
                         success = false;
-                        continue;
                     }
                 },
                 Err(err) => {
                     eprintln!("{file_path}: {err}");
                     success = false;
-                    continue;
                 }
             };
         } else {
